@@ -5,7 +5,68 @@
 
 tinyCUDA strips away the tedium of CUDA development: no more manual `cudaMalloc`/`cudaMemcpy` juggling, launch errors, or rough timings. It's designed for quick prototyping—perfect for new CUDA users or anyone tired of repetitive setup. Not a full framework (no autograd or N-D tensors); just sane defaults for 1D buffers and kernel launches.
 
-**Built with:** C++17, CUDA 11+. Tested on NVIDIA GPUs (Turing+).
+**Built with:** C++17, CUDA 11+. Compatible with all CUDA-capable GPUs.
+
+## See the Benefit: Before & After
+
+**Vanilla CUDA (with manual error checks and rough single-run timing):**
+```cpp
+#include <cuda_runtime.h>
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+
+// Manual error check macro (boilerplate everywhere)
+#define CUDA_CHECK(call) { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        printf("CUDA error at %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
+        exit(1); \
+    } \
+}
+
+// Assume h_a, h_out are host arrays; kernel updates output
+float *h_a = /* host data */, *d_a, *d_out;
+int N = /* size */;
+dim3 blocks(/* ... */), threads(/* ... */);
+
+// Alloc device mem
+CUDA_CHECK(cudaMalloc(&d_a, N * sizeof(float)));
+CUDA_CHECK(cudaMalloc(&d_out, N * sizeof(float)));
+
+// H→D copy
+CUDA_CHECK(cudaMemcpy(d_a, h_a, N * sizeof(float), cudaMemcpyHostToDevice));
+
+// Rough timing: single run (no warmup, includes JIT/host overhead)
+auto start = std::chrono::high_resolution_clock::now();
+kernel<<<blocks, threads>>>(d_a, d_out, N);
+CUDA_CHECK(cudaGetLastError());  // Check launch errors
+CUDA_CHECK(cudaDeviceSynchronize());  // Wait + measure total wall time
+auto end = std::chrono::high_resolution_clock::now();
+float ms = std::chrono::duration<float, std::milli>(end - start).count();
+
+// D→H copy
+CUDA_CHECK(cudaMemcpy(h_out, d_out, N * sizeof(float), cudaMemcpyDeviceToHost));
+
+// Free (forget one? Memory leak!)
+CUDA_CHECK(cudaFree(d_a));
+CUDA_CHECK(cudaFree(d_out));
+```
+
+**With tinyCUDA (focus on kernel):**
+```cpp
+#include "tinycuda/tinycuda.hpp"  // Includes error checks, chrono, etc.
+
+// Assume h_a is host data; buf mirrors it (updates on to_cpu)
+tinycuda::Buffer<float> buf(h_a, N);
+buf.to_gpu();  // Alloc + H→D (auto-checked)
+
+// Accurate timing: warmup + averaged batches (no JIT bias)
+float ms = tinycuda::KernelProfiler(1, 10)([&] {
+    kernel<<<blocks, threads>>>(buf.gpu_data(), /* out via another buf or ptr */, N);
+});
+buf.to_cpu();  // D→H (device mem auto-freed on destruct)
+```
 
 ## Features
 
@@ -13,6 +74,8 @@ tinyCUDA strips away the tedium of CUDA development: no more manual `cudaMalloc`
 - **KernelProfiler**: Warmup + batched timing for accurate kernel execution averages (ms). Untimed warmup avoids JIT overhead.
 - **CUDA_CHECK**: Macro for immediate error checking/abort with file:line context.
 - **tinycuda.hpp**: One-include aggregator for the full API.
+- **Header-only**: No installation/linking required. Include `tinycuda.hpp` and you are good to go!
+
 
 ## Quick Start
 
@@ -88,6 +151,41 @@ Include everything: `#include "tinycuda/tinycuda.hpp"`.
 - **[matmul.cu](examples/matmul.cu)**: Non-tiled matrix multiply (512x512) with GFLOPS calc.
 
 Build any: `./scripts/build_and_run.sh examples/matmul.cu matmul`.
+
+## Installation & Usage
+
+tinycuda is a **header-only library** — no compilation or linking required. Just include the headers and compile your `.cu` files with nvcc.
+
+### Including in Your Project
+- Download (or clone) and copy the `include/tinycuda/` folder into your project directory (or a `third_party/` subdir).
+- Include in your `.cu` files:
+  ```cpp
+  #include "tinycuda/tinycuda.hpp"  // bundles everything
+  // Or granular: #include "tinycuda/memory.hpp" etc.
+  ```
+
+### Compilation
+Compile with nvcc (C++17 required):
+```bash
+nvcc -std=c++17 -I/path/to/tinycuda/include your_kernel.cu -o your_output
+./your_output
+```
+
+Example with a simple kernel:
+```bash
+nvcc -std=c++17 -I./include my_add.cu -o my_add
+./my_add
+```
+
+### System-Wide (Optional)
+For global access:
+1. Copy `include/tinycuda/` to `/usr/local/include/tinycuda/` (or similar).
+2. Compile anywhere:
+   ```bash
+   nvcc -std=c++17 -I/usr/local/include your_kernel.cu -o your_output
+   ```
+
+No dependencies beyond CUDA Toolkit. That's it — write your kernel and run! 🚀
 
 ## Project Structure
 ```
