@@ -7,6 +7,8 @@ tinyCUDA strips away the tedium of CUDA development: no more manual `cudaMalloc`
 
 **Built with:** C++17, CUDA 11+. Compatible with all CUDA-capable GPUs.
 
+Also visit the [blog post](https://onixhoque.github.io/blog/tinycuda-release/) for a step-by-step guide on getting started.
+
 ## See the Benefit: Before & After
 
 **Vanilla CUDA (with manual error checks and rough single-run timing):**
@@ -138,7 +140,7 @@ printf("Avg: %.4f ms\n", ms);
 
 ### Error Handling
 ```cpp
-#define CUDA_CHECK(expr) /* Auto-checks & aborts on fail */
+/* Auto-checks CUDA expr for errors and aborts on failure. Defined as CUDA_CHECK(expr) in error.hpp. */
 CUDA_CHECK(cudaMalloc(&ptr, N * sizeof(float)));
 ```
 
