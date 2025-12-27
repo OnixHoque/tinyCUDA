@@ -26,9 +26,7 @@ tinyCUDA strips away the tedium of CUDA development: no more manual `cudaMalloc`
 }
 
 // Assume h_a, h_out are host arrays; kernel updates output
-float *h_a = /* host data */, *d_a, *d_out;
-int N = /* size */;
-dim3 blocks(/* ... */), threads(/* ... */);
+float *h_a = /* host data */, *d_a, *d_out; int N = /* size */;
 
 // Alloc device mem
 CUDA_CHECK(cudaMalloc(&d_a, N * sizeof(float)));
@@ -57,14 +55,18 @@ CUDA_CHECK(cudaFree(d_out));
 ```cpp
 #include "tinycuda/tinycuda.hpp"  // Includes error checks, chrono, etc.
 
-// Assume h_a is host data; buf mirrors it (updates on to_cpu)
-tinycuda::Buffer<float> buf(h_a, N);
+float *h_a = /* host data */; int N = /* size */;
+tinycuda::Buffer<float> buf(h_a, N); 
 buf.to_gpu();  // Alloc + H→D (auto-checked)
 
-// Accurate timing: warmup + averaged batches (no JIT bias)
+//Single run:
+kernel<<<blocks, threads>>>(buf.gpu_data(), /* out via another buf or ptr */, N);
+
+// (or) Accurate timing: warmup + averaged batches (no JIT bias)
 float ms = tinycuda::KernelProfiler(1, 10)([&] {
     kernel<<<blocks, threads>>>(buf.gpu_data(), /* out via another buf or ptr */, N);
 });
+
 buf.to_cpu();  // D→H (device mem auto-freed on destruct)
 ```
 
